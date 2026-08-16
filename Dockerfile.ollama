@@ -1,0 +1,15 @@
+# Ollama Dockerfile for Render
+FROM ollama/ollama:latest
+
+# Pre-pull models (optional:ll models at build time
+# Note: This increases build time but ensures models are ready
+ENV OLLAMA_MODELS=llama3.1:70b
+
+# Expose Ollama API port
+EXPOSE 11434
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost:11434/api/tags || exit 1
+
+CMD ["serve"]
