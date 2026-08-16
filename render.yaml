@@ -1,21 +1,16 @@
 version: "1"
 services:
-  # PostgreSQL Database
+  # PostgreSQL Database - minimal Blueprint format
   - type: pserv
     name: remote-job-agent-db
     plan: free
     region: oregon
-    databaseName: remote_job_agent
-    user: remote_job_agent
-    postgresMajorVersion: "16"
-    ipAllowList: []
 
-  # Redis
+  # Redis - minimal Blueprint format
   - type: redis
     name: remote-job-agent-redis
     plan: free
     region: oregon
-    maxmemoryPolicy: allkeys_lru
 
   # API (Web Service)
   - type: web
