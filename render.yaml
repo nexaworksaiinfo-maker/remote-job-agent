@@ -7,7 +7,7 @@ services:
     region: oregon
     databaseName: remote_job_agent
     user: remote_job_agent
-    version: "16"
+    postgresMajorVersion: "16"
     ipAllowList: []
 
   # Redis
@@ -18,7 +18,7 @@ services:
     maxmemoryPolicy: allkeys_lru
 
   # API (Web Service)
-  - type: web
+  - type: web_service
     name: remote-job-agent-api
     runtime: docker
     dockerfilePath: ./Dockerfile
@@ -305,7 +305,7 @@ services:
     numInstances: 1
 
   # Celery Beat (Cron Job)
-  - type: cron
+  - type: cron_job
     name: remote-job-agent-beat
     runtime: docker
     dockerfilePath: ./Dockerfile
@@ -337,7 +337,7 @@ services:
     numInstances: 1
 
   # Ollama Server
-  - type: web
+  - type: web_service
     name: ollama-server
     runtime: docker
     dockerfilePath: ./Dockerfile.ollama
