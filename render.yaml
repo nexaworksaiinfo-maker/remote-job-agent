@@ -1,12 +1,12 @@
 version: "1"
 services:
-  # PostgreSQL Database - managed service, no runtime/startCommand
-  - type: pserv
+  # PostgreSQL Database - try 'database' type
+  - type: database
     name: remote-job-agent-db
     plan: free
     region: oregon
 
-  # Redis - managed service, needs ipAllowList
+  # Redis - try 'redis' type with minimal config
   - type: redis
     name: remote-job-agent-redis
     plan: free
@@ -110,7 +110,7 @@ services:
     autoDeploy: true
     numInstances: 1
 
-  # Scraper Worker - Docker, no startCommand (uses Dockerfile CMD, override via env)
+  # Scraper Worker - Docker, no startCommand
   - type: worker
     name: remote-job-agent-scraper
     runtime: docker
