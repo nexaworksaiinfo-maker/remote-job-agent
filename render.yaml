@@ -1,18 +1,19 @@
 version: "1"
 services:
-  # PostgreSQL Database - minimal Blueprint format
+  # PostgreSQL Database - managed service, no runtime/startCommand
   - type: pserv
     name: remote-job-agent-db
     plan: free
     region: oregon
 
-  # Redis - minimal Blueprint format
+  # Redis - managed service, needs ipAllowList
   - type: redis
     name: remote-job-agent-redis
     plan: free
     region: oregon
+    ipAllowList: []
 
-  # API (Web Service)
+  # API (Web Service) - Docker, no startCommand (uses Dockerfile CMD)
   - type: web
     name: remote-job-agent-api
     runtime: docker
@@ -109,14 +110,13 @@ services:
     autoDeploy: true
     numInstances: 1
 
-  # Scraper Worker
+  # Scraper Worker - Docker, no startCommand (uses Dockerfile CMD, override via env)
   - type: worker
     name: remote-job-agent-scraper
     runtime: docker
     dockerfilePath: ./Dockerfile
     region: oregon
     plan: free
-    startCommand: celery -A app.core.celery worker -Q scrapers -c 2 --loglevel=info
     envVars:
       - key: DATABASE_URL
         fromDatabase:
@@ -137,6 +137,10 @@ services:
           type: redis
           name: remote-job-agent-redis
           property: connectionString
+      - key: CELERY_QUEUE
+        value: "scrapers"
+      - key: CELERY_CONCURRENCY
+        value: "2"
       - key: OPENAI_API_KEY
         sync: false
       - key: LINKEDIN_EMAIL
@@ -167,7 +171,6 @@ services:
     dockerfilePath: ./Dockerfile
     region: oregon
     plan: free
-    startCommand: celery -A app.core.celery worker -Q matchers -c 2 --loglevel=info
     envVars:
       - key: DATABASE_URL
         fromDatabase:
@@ -188,6 +191,10 @@ services:
           type: redis
           name: remote-job-agent-redis
           property: connectionString
+      - key: CELERY_QUEUE
+        value: "matchers"
+      - key: CELERY_CONCURRENCY
+        value: "2"
       - key: OPENAI_API_KEY
         sync: false
       - key: OLLAMA_BASE_URL
@@ -208,7 +215,6 @@ services:
     dockerfilePath: ./Dockerfile
     region: oregon
     plan: standard
-    startCommand: celery -A app.core.celery worker -Q applications -c 1 --loglevel=info
     envVars:
       - key: DATABASE_URL
         fromDatabase:
@@ -229,6 +235,10 @@ services:
           type: redis
           name: remote-job-agent-redis
           property: connectionString
+      - key: CELERY_QUEUE
+        value: "applications"
+      - key: CELERY_CONCURRENCY
+        value: "1"
       - key: OPENAI_API_KEY
         sync: false
       - key: LINKEDIN_EMAIL
@@ -257,7 +267,6 @@ services:
     dockerfilePath: ./Dockerfile
     region: oregon
     plan: free
-    startCommand: celery -A app.core.celery worker -Q notifications -c 2 --loglevel=info
     envVars:
       - key: DATABASE_URL
         fromDatabase:
@@ -278,6 +287,10 @@ services:
           type: redis
           name: remote-job-agent-redis
           property: connectionString
+      - key: CELERY_QUEUE
+        value: "notifications"
+      - key: CELERY_CONCURRENCY
+        value: "2"
       - key: TELEGRAM_BOT_TOKEN
         sync: false
       - key: SMTP_HOST
@@ -299,15 +312,14 @@ services:
     autoDeploy: true
     numInstances: 1
 
-  # Celery Beat (Cron Job)
+  # Celery Beat (Cron Job) - starter plan, no startCommand
   - type: cron
     name: remote-job-agent-beat
     runtime: docker
     dockerfilePath: ./Dockerfile
     region: oregon
-    plan: free
+    plan: starter
     schedule: "*/15 * * * *"
-    startCommand: celery -A app.core.celery beat --loglevel=info
     envVars:
       - key: DATABASE_URL
         fromDatabase:
@@ -338,7 +350,6 @@ services:
     dockerfilePath: ./Dockerfile.ollama
     region: oregon
     plan: standard
-    startCommand: serve
     envVars:
       - key: OLLAMA_MODELS
         value: "llama3.1:70b"
