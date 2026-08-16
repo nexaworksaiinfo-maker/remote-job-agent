@@ -124,7 +124,7 @@ services:
           property: connectionString
       - key: REDIS_URL
         fromService:
-type: redis
+          type: redis
           name: remote-job-agent-redis
           property: connectionString
       - key: CELERY_BROKER_URL
@@ -266,7 +266,7 @@ type: redis
           name: remote-job-agent-redis
           property: connectionString
       - key: CELERY_BROKER_URL
-fromService:
+        fromService:
           type: redis
           name: remote-job-agent-redis
           property: connectionString
