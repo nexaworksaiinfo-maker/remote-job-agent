@@ -1,0 +1,256 @@
+# Remote Job Agent - Docker Compose
+
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: remote-job-agent-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-remote_job_agent}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-remote_job_agent}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-remote_job_agent}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - remote-job-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: remote-job-agent-redis
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - remote-job-network
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: remote-job-agent-api
+    environment:
+      - ENVIRONMENT=production
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-remote_job_agent}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-remote_job_agent}
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://redis:6379/2
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - LINKEDIN_EMAIL=${LINKEDIN_EMAIL}
+      - LINKEDIN_PASSWORD=${LINKEDIN_PASSWORD}
+      - INDEED_API_KEY=${INDEED_API_KEY}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - SMTP_HOST=${SMTP_HOST}
+      - SMTP_PORT=${SMTP_PORT}
+      - SMTP_USERNAME=${SMTP_USERNAME}
+      - SMTP_PASSWORD=${SMTP_PASSWORD}
+      - EMAIL_FROM=${EMAIL_FROM}
+      - SECRET_KEY=${SECRET_KEY}
+      - FRONTEND_URL=${FRONTEND_URL}
+      - CAL_COM_API_KEY=${CAL_COM_API_KEY}
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - remote-job-network
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 512M
+
+  worker-scraper:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: remote-job-agent-worker-scraper
+    command: celery -A app.core.celery worker -Q scrapers -c 2 --loglevel=info
+    environment:
+      - ENVIRONMENT=production
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-remote_job_agent}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-remote_job_agent}
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://redis:6379/2
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - LINKEDIN_EMAIL=${LINKEDIN_EMAIL}
+      - LINKEDIN_PASSWORD=${LINKEDIN_PASSWORD}
+      - INDEED_API_KEY=${INDEED_API_KEY}
+      - PLAYWRIGHT_HEADLESS=true
+      - PLAYWRIGHT_SLOW_MO=100
+      - PLAYWRIGHT_TIMEOUT=60000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - remote-job-network
+    volumes:
+      - playwright_data:/tmp/playwright
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 1G
+
+  worker-matcher:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: remote-job-agent-worker-matcher
+    command: celery -A app.core.celery worker -Q matchers -c 2 --loglevel=info
+    environment:
+      - ENVIRONMENT=production
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-remote_job_agent}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-remote_job_agent}
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://redis:6379/2
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - remote-job-network
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 512M
+
+  worker-applier:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: remote-job-agent-worker-applier
+    command: celery -A app.core.celery worker -Q applications -c 1 --loglevel=info
+    environment:
+      - ENVIRONMENT=production
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-remote_job_agent}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-remote_job_agent}
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://redis:6379/2
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - LINKEDIN_EMAIL=${LINKEDIN_EMAIL}
+      - LINKEDIN_PASSWORD=${LINKEDIN_PASSWORD}
+      - PLAYWRIGHT_HEADLESS=true
+      - PLAYWRIGHT_SLOW_MO=200
+      - PLAYWRIGHT_TIMEOUT=120000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - remote-job-network
+    volumes:
+      - playwright_data:/tmp/playwright
+      - ./resumes:/app/resumes
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 1G
+
+  worker-notifications:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: remote-job-agent-worker-notifications
+    command: celery -A app.core.celery worker -Q notifications -c 2 --loglevel=info
+    environment:
+      - ENVIRONMENT=production
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-remote_job_agent}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-remote_job_agent}
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://redis:6379/2
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - SMTP_HOST=${SMTP_HOST}
+      - SMTP_PORT=${SMTP_PORT}
+      - SMTP_USERNAME=${SMTP_USERNAME}
+      - SMTP_PASSWORD=${SMTP_PASSWORD}
+      - EMAIL_FROM=${EMAIL_FROM}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - remote-job-network
+
+  beat:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: remote-job-agent-beat
+    command: celery -A app.core.celery beat --loglevel=info
+    environment:
+      - ENVIRONMENT=production
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-remote_job_agent}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-remote_job_agent}
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://redis:6379/2
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - remote-job-network
+
+  flower:
+    image: mher/flower:2.0
+    container_name: remote-job-agent-flower
+    command: celery -A app.core.celery flower --port=5555 --basic_auth=${FLOWER_USER}:${FLOWER_PASSWORD}
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://redis:6379/2
+    ports:
+      - "5555:5555"
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - remote-job-network
+
+volumes:
+  postgres_data:
+  redis_data:
+  playwright_data:
+
+networks:
+  remote-job-network:
+    driver: bridge
