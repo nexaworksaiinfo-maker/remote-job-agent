@@ -1,4 +1,6 @@
+version: "1"
 services:
+  # PostgreSQL Database
   - type: pserv
     name: remote-job-agent-db
     plan: free
@@ -8,12 +10,14 @@ services:
     version: "16"
     ipAllowList: []
 
+  # Redis
   - type: redis
     name: remote-job-agent-redis
     plan: free
     region: oregon
     maxmemoryPolicy: allkeys_lru
 
+  # API (Web Service)
   - type: web
     name: remote-job-agent-api
     runtime: docker
@@ -110,6 +114,7 @@ services:
     autoDeploy: true
     numInstances: 1
 
+  # Scraper Worker
   - type: worker
     name: remote-job-agent-scraper
     runtime: docker
@@ -160,6 +165,7 @@ services:
     autoDeploy: true
     numInstances: 1
 
+  # Matcher Worker
   - type: worker
     name: remote-job-agent-matcher
     runtime: docker
@@ -200,6 +206,7 @@ services:
     autoDeploy: true
     numInstances: 1
 
+  # Applier Worker (Standard plan for Playwright)
   - type: worker
     name: remote-job-agent-applier
     runtime: docker
@@ -248,6 +255,7 @@ services:
     autoDeploy: true
     numInstances: 1
 
+  # Notifications Worker
   - type: worker
     name: remote-job-agent-notifications
     runtime: docker
@@ -296,6 +304,7 @@ services:
     autoDeploy: true
     numInstances: 1
 
+  # Celery Beat (Cron Job)
   - type: cron
     name: remote-job-agent-beat
     runtime: docker
@@ -327,6 +336,7 @@ services:
     autoDeploy: true
     numInstances: 1
 
+  # Ollama Server
   - type: web
     name: ollama-server
     runtime: docker
